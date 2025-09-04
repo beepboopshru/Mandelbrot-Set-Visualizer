@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { palettes, type PaletteName } from '@/lib/colors';
 
 interface FractalCanvasProps {
@@ -10,8 +10,7 @@ interface FractalCanvasProps {
   onZoomChange: (zoom: number) => void;
 }
 
-const LOW_RES_PIXEL_SIZE = 4;
-const DEBOUNCE_DELAY = 300;
+const DEBOUNCE_DELAY = 150;
 
 export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomChange }: FractalCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,40 +23,61 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
 
     const interactionTimeout = useRef<NodeJS.Timeout | null>(null);
 
+    const numWorkers = useMemo(() => (typeof window !== 'undefined' ? window.navigator.hardwareConcurrency || 2 : 2), []);
+    const workers = useMemo<Worker[]>(() => [], []);
+
+
     const renderMandelbrot = useCallback((isLowRes: boolean = false) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        
         const { width, height } = canvas;
         const palette = palettes[paletteName];
-        const pixelSize = isLowRes ? LOW_RES_PIXEL_SIZE : 1;
-        
-        for (let x = 0; x < width; x += pixelSize) {
-            for (let y = 0; y < height; y += pixelSize) {
-                let a = center.current[0] + (x - width / 2) / (0.5 * zoom.current * width);
-                let b = center.current[1] + (y - height / 2) / (0.5 * zoom.current * height);
+        const pixelSize = isLowRes ? Math.max(2, Math.floor(8 / zoom.current)) : 1;
 
-                const ca = a;
-                const cb = b;
-                let n = 0;
-
-                while (n < iterations) {
-                    const aa = a * a - b * b;
-                    const bb = 2 * a * b;
-                    a = aa + ca;
-                    b = bb + cb;
-                    if (a * a + b * b > 4) break;
-                    n++;
-                }
-                
-                ctx.fillStyle = palette(n, iterations);
-                ctx.fillRect(x, y, pixelSize, pixelSize);
+        if (workers.length === 0) {
+            for (let i = 0; i < numWorkers; i++) {
+                const worker = new Worker(new URL('../workers/mandelbrot.worker.ts', import.meta.url));
+                worker.onmessage = (e) => {
+                    const { imageData, yStart } = e.data;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.putImageData(imageData, 0, yStart);
+                    }
+                };
+                workers.push(worker);
             }
         }
-    }, [iterations, paletteName]);
+        
+        const rowsPerWorker = Math.ceil(height / numWorkers);
+
+        for (let i = 0; i < numWorkers; i++) {
+            const yStart = i * rowsPerWorker;
+            let yEnd = (i + 1) * rowsPerWorker;
+            if (yEnd > height) yEnd = height;
+
+            if (yStart >= yEnd) continue;
+
+            const offscreenCanvas = new OffscreenCanvas(width, yEnd - yStart);
+            const ctx = offscreenCanvas.getContext('2d');
+            if(!ctx) continue;
+            
+            const imageData = ctx.createImageData(width, yEnd - yStart);
+            
+            workers[i].postMessage({
+                width,
+                height,
+                yStart,
+                yEnd,
+                center: center.current,
+                zoom: zoom.current,
+                iterations,
+                paletteName,
+                imageData,
+            });
+        }
+
+    }, [iterations, paletteName, workers, numWorkers]);
 
     const handleInteractionEnd = useCallback(() => {
         if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
@@ -70,8 +90,7 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
 
     const handleInteractionStart = useCallback(() => {
         if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
-        renderMandelbrot(true);
-    }, [renderMandelbrot]);
+    }, []);
     
     useEffect(() => {
         renderMandelbrot(false);
@@ -105,9 +124,14 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
         renderMandelbrot(false);
+        
+        return () => {
+            resizeObserver.disconnect();
+            workers.forEach(w => w.terminate());
+            workers.length = 0;
+        }
 
-        return () => resizeObserver.disconnect();
-    }, [renderMandelbrot]);
+    }, [renderMandelbrot, workers]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -135,7 +159,21 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
             center.current[0] -= dx / (0.5 * zoom.current * canvas.width);
             center.current[1] -= dy / (0.5 * zoom.current * canvas.height);
             lastMousePos.current = { x: e.clientX, y: e.clientY };
-            renderMandelbrot(true);
+            // Quick pan preview
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.save();
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                if (tempCtx) {
+                    tempCtx.drawImage(canvas, 0, 0);
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(tempCanvas, dx, dy);
+                }
+                ctx.restore();
+            }
         };
 
         const handleWheel = (e: WheelEvent) => {
