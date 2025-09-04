@@ -119,9 +119,11 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
         };
 
         const handleMouseUp = () => {
-            isDragging.current = false;
-            canvas.style.cursor = 'grab';
-            handleInteractionEnd();
+            if (isDragging.current) {
+                isDragging.current = false;
+                canvas.style.cursor = 'grab';
+                handleInteractionEnd();
+            }
         };
 
         const handleMouseMove = (e: MouseEvent) => {
@@ -153,6 +155,7 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
             center.current[0] += worldX - newWorldX;
             center.current[1] += worldY - newWorldY;
             
+            renderMandelbrot(true);
             handleInteractionEnd();
         };
 
