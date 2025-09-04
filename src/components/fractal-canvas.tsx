@@ -74,6 +74,10 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
         if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
         renderMandelbrot(true);
     }, [renderMandelbrot]);
+    
+    useEffect(() => {
+        renderMandelbrot(false);
+    }, [iterations, paletteName, renderMandelbrot]);
 
     useEffect(() => {
         const resetView = () => {
