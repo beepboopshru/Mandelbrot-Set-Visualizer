@@ -19,16 +19,21 @@ onmessage = (e) => {
         zoom,
         iterations,
         paletteName,
-        imageData
+        pixelSize,
     } = e.data;
 
     const palette = palettes[paletteName as PaletteName];
+    const offscreenCanvas = new OffscreenCanvas(width, yEnd - yStart);
+    const ctx = offscreenCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const imageData = ctx.createImageData(width, yEnd - yStart);
     const data = imageData.data;
 
-    for (let y = yStart; y < yEnd; y++) {
-        for (let x = 0; x < width; x++) {
-            let a = center[0] + (x - width / 2) / (0.5 * zoom * width);
-            let b = center[1] + (y - height / 2) / (0.5 * zoom * height);
+    for (let y = 0; y < yEnd - yStart; y += pixelSize) {
+        for (let x = 0; x < width; x += pixelSize) {
+            let a = center[0] + ((x + x*pixelSize/2) - width / 2) / (0.5 * zoom * width);
+            let b = center[1] + ((y+yStart + y*pixelSize/2) - height / 2) / (0.5 * zoom * height);
 
             const ca = a;
             const cb = b;
@@ -45,14 +50,20 @@ onmessage = (e) => {
             
             const colorStr = palette(n, iterations);
             const [r, g, b_] = n === iterations ? [0,0,0] : hexToRgb(colorStr);
-            const pixelIndex = ((y - yStart) * width + x) * 4;
             
-            data[pixelIndex] = r;
-            data[pixelIndex + 1] = g;
-            data[pixelIndex + 2] = b_;
-            data[pixelIndex + 3] = 255;
+            for (let py = 0; py < pixelSize; py++) {
+                for (let px = 0; px < pixelSize; px++) {
+                    if (y + py >= yEnd - yStart || x + px >= width) continue;
+                    const pixelIndex = ((y + py) * width + (x + px)) * 4;
+                    data[pixelIndex] = r;
+                    data[pixelIndex + 1] = g;
+                    data[pixelIndex + 2] = b_;
+                    data[pixelIndex + 3] = 255;
+                }
+            }
         }
     }
-
-    postMessage({imageData, yStart}, [imageData.data.buffer]);
+    
+    ctx.putImageData(imageData, 0, 0);
+    postMessage({imageData, yStart});
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useCallback, useMemo } from 'react';
-import { palettes, type PaletteName } from '@/lib/colors';
+import type { PaletteName } from '@/lib/colors';
 
 interface FractalCanvasProps {
   iterations: number;
@@ -32,7 +32,6 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
         if (!canvas) return;
 
         const { width, height } = canvas;
-        const palette = palettes[paletteName];
         const pixelSize = isLowRes ? Math.max(2, Math.floor(8 / zoom.current)) : 1;
 
         if (workers.length === 0) {
@@ -57,12 +56,6 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
             if (yEnd > height) yEnd = height;
 
             if (yStart >= yEnd) continue;
-
-            const offscreenCanvas = new OffscreenCanvas(width, yEnd - yStart);
-            const ctx = offscreenCanvas.getContext('2d');
-            if(!ctx) continue;
-            
-            const imageData = ctx.createImageData(width, yEnd - yStart);
             
             workers[i].postMessage({
                 width,
@@ -73,7 +66,7 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
                 zoom: zoom.current,
                 iterations,
                 paletteName,
-                imageData,
+                pixelSize,
             });
         }
 
@@ -90,7 +83,8 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
 
     const handleInteractionStart = useCallback(() => {
         if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
-    }, []);
+        renderMandelbrot(true);
+    }, [renderMandelbrot]);
     
     useEffect(() => {
         renderMandelbrot(false);
@@ -159,21 +153,7 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
             center.current[0] -= dx / (0.5 * zoom.current * canvas.width);
             center.current[1] -= dy / (0.5 * zoom.current * canvas.height);
             lastMousePos.current = { x: e.clientX, y: e.clientY };
-            // Quick pan preview
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                ctx.save();
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                if (tempCtx) {
-                    tempCtx.drawImage(canvas, 0, 0);
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(tempCanvas, dx, dy);
-                }
-                ctx.restore();
-            }
+            renderMandelbrot(true);
         };
 
         const handleWheel = (e: WheelEvent) => {
@@ -195,12 +175,13 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
             center.current[0] += worldX - newWorldX;
             center.current[1] += worldY - newWorldY;
             
+            renderMandelbrot(true);
             handleInteractionEnd();
         };
 
         canvas.addEventListener('mousedown', handleMouseDown);
         canvas.addEventListener('mouseup', handleMouseUp);
-        canvas.addEventListener('mouseleave', handleMouseUp); // Stop dragging if mouse leaves
+        canvas.addEventListener('mouseleave', handleMouseUp);
         canvas.addEventListener('mousemove', handleMouseMove);
         canvas.addEventListener('wheel', handleWheel);
 
