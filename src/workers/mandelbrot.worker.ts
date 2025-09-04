@@ -29,11 +29,17 @@ onmessage = (e) => {
 
     const imageData = ctx.createImageData(width, yEnd - yStart);
     const data = imageData.data;
+    
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
+    const scale = 0.5 * zoom;
 
     for (let y = 0; y < yEnd - yStart; y += pixelSize) {
         for (let x = 0; x < width; x += pixelSize) {
-            let a = center[0] + ((x + x*pixelSize/2) - width / 2) / (0.5 * zoom * width);
-            let b = center[1] + ((y+yStart + y*pixelSize/2) - height / 2) / (0.5 * zoom * height);
+            const currentY = y + yStart;
+            
+            let a = center[0] + (x - halfWidth) / (scale * width);
+            let b = center[1] + (currentY - halfHeight) / (scale * height);
 
             const ca = a;
             const cb = b;
