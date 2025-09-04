@@ -1,5 +1,2 @@
-# Firebase Studio
-
-This is a NextJS starter in Firebase Studio.
-
-To get started, take a look at src/app/page.tsx.
+# Mandelbrot-Set-Visualizer
+A simple visualizer for the Mandelbrot set, built with Next.js, TypeScript, and Web Workers.
