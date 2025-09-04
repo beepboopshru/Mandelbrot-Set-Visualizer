@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useEffect, useCallback } from 'react';
-import { shouldRefine } from '@/ai/flows/progressive-rendering';
 import { palettes, type PaletteName } from '@/lib/colors';
 
 interface FractalCanvasProps {
@@ -62,9 +61,8 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
 
     const handleInteractionEnd = useCallback(() => {
         if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
-        interactionTimeout.current = setTimeout(async () => {
-            const { shouldRefine: doRefine } = await shouldRefine({ isInteracting: false });
-            if (doRefine && canvasRef.current) {
+        interactionTimeout.current = setTimeout(() => {
+            if (canvasRef.current) {
                 renderMandelbrot(false);
             }
         }, DEBOUNCE_DELAY);
@@ -159,7 +157,6 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
             center.current[0] += worldX - newWorldX;
             center.current[1] += worldY - newWorldY;
             
-            renderMandelbrot(true);
             handleInteractionEnd();
         };
 
@@ -176,7 +173,7 @@ export function FractalCanvas({ iterations, paletteName, resetTrigger, onZoomCha
             canvas.removeEventListener('mousemove', handleMouseMove);
             canvas.removeEventListener('wheel', handleWheel);
         };
-    }, [handleInteractionStart, handleInteractionEnd, onZoomChange, renderMandelbrot]);
+    }, [handleInteractionStart, handleInteractionEnd, onZoomChange]);
     
     return (
         <div ref={containerRef} className="w-full h-full bg-black">
